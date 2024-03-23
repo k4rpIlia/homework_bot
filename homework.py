@@ -135,8 +135,8 @@ def parse_status(homework):
         status = homework.get('status')
         if status in HOMEWORK_VERDICTS:
             verdict = HOMEWORK_VERDICTS[status]
-            message = f'Изменился статус проверки работы \
-                "{homework_name}". {verdict}'
+            message = (f'Изменился статус проверки работы'
+                       f' "{homework_name}". {verdict}')
             return message
         else:
             raise ValueError('Статус не соответствует ожидаемому')
