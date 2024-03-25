@@ -12,6 +12,9 @@ import requests
 
 import telegram
 
+from http import HTTPStatus
+
+
 load_dotenv()
 
 PRACTICUM_TOKEN = os.getenv('TOKEN_PRAKTICUM')
@@ -49,12 +52,17 @@ def check_tokens():
     Проверяет доступность переменных окружения.
     которые необходимы для работы программы.
     """
-    required_tokens = ['PRACTICUM_TOKEN', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID']
+    required_tokens = [
+        'PRACTICUM_TOKEN',
+        'TELEGRAM_TOKEN',
+        'TELEGRAM_CHAT_ID']
     for token_name in required_tokens:
         if not globals().get(token_name):
             error_message = f'Отсутствует переменная окружения: {token_name}'
             logging.critical(error_message)
-            raise SystemExit(error_message)
+            return False
+        else:
+            return True
 
 
 def send_message(bot, message):
@@ -62,7 +70,6 @@ def send_message(bot, message):
     try:
         bot.send_message(chat_id=23436567687654, text=message)
         logging.debug('Отправлено сообщение в Telegram')
-        return True
     except telegram.error.TelegramError:
         logging.error('Ошибка отправки сообщения')
 
@@ -76,13 +83,16 @@ def get_api_answer(timestamp):
     payload = {'from_date': timestamp}
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             return response.json()
         else:
-            raise Exception('Ошибка при запросе к API')
+            error_message = (
+                f'Ошибка в запросе! Gfhаметры запроса:{payload},'
+                f'Код ответа: {response.status_code},'
+                f'Контент ответа: {response.content}')
+            raise Exception(error_message)
     except requests.RequestException as error:
         logging.error(f'Ошибка при запросе к API: {error}')
-        return None
 
 
 def check_response(response):
@@ -111,7 +121,7 @@ def check_response(response):
     if not response["homeworks"]:
         err_message = ('В словаре нет ключа "homeworks"')
         logging.error(err_message)
-        return False
+        raise TypeError(err_message)
 
     if not all(isinstance(hw, dict) for hw in response['homeworks']):
         err_message = 'Тип данных в "homeworks" не является словарем'
@@ -152,7 +162,9 @@ def main():
     global last_sent_message
     logging.info('Бот запущен')
 
-    check_tokens()
+    if not check_tokens():
+        logging.critical()
+        SystemExit
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
@@ -162,26 +174,22 @@ def main():
             response = get_api_answer(timestamp)
             if check_response(response):
                 if response['homeworks'] == []:
-                    break
+                    logging.debug('Пустая домашка')
                 status = parse_status(response.get('homeworks')[0])
-                if status:
-                    if status != last_sent_message:
-                        if send_message(bot, status):
-                            last_sent_message = status
-                        else:
-                            logging.error('Ошибка отправки сообщения')
+                if status != last_sent_message:
+                    if send_message(bot, status):
+                        last_sent_message = status
+                        timestamp = response.get('current_date', timestamp)
                     else:
-                        logging.debug('Статус работы  не изменился.')
-            else:
-                logging.error('Ответ API не соответствует документации')
-                break
+                        logging.error('Ошибка отправки сообщения')
+                else:
+                    logging.debug('Статус работы  не изменился.')
         except Exception as error:
             message = error
+            logging.exception('Сбой в работе программы: {error}')
             send_message(bot, message)
-        time.sleep(RETRY_PERIOD)
-    time.sleep(RETRY_PERIOD)
-    if __name__ == '__main__':
-        main()
+        finally:
+            time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
