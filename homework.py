@@ -87,12 +87,14 @@ def get_api_answer(timestamp):
             return response.json()
         else:
             error_message = (
-                f'Ошибка в запросе! Gfhаметры запроса:{payload},'
-                f'Код ответа: {response.status_code},'
-                f'Контент ответа: {response.content}')
+                f'Ошибка в запросе! '
+                f'{ENDPOINT}, headers={HEADERS}, params={payload}')
             raise Exception(error_message)
     except requests.RequestException as error:
         logging.error(f'Ошибка при запросе к API: {error}')
+        # Нет возможности убрать логирование из функций и вынести в его main,
+        # не проходят тесты pytest. Следуя коментарию я удаляю всё возможное
+        # логирование из main, чтобы избежать дублирования
 
 
 def check_response(response):
@@ -127,7 +129,9 @@ def check_response(response):
         err_message = 'Тип данных в "homeworks" не является словарем'
         raise TypeError(err_message)
 
-    return True
+    if not response['homeworks']:
+        err_message = 'Пустая домашка'
+        logging.debug(err_message)
 
 
 def parse_status(homework):
@@ -172,22 +176,17 @@ def main():
     while True:
         try:
             response = get_api_answer(timestamp)
-            if check_response(response):
-                if response['homeworks'] == []:
-                    logging.debug('Пустая домашка')
-                status = parse_status(response.get('homeworks')[0])
-                if status != last_sent_message:
-                    if send_message(bot, status):
-                        last_sent_message = status
-                        timestamp = response.get('current_date', timestamp)
-                    else:
-                        logging.error('Ошибка отправки сообщения')
-                else:
-                    logging.debug('Статус работы  не изменился.')
+            check_response(response)
+            status = parse_status(response.get('homeworks')[0])
+            if status != last_sent_message:
+                if send_message(bot, status):
+                    last_sent_message = status
+                    timestamp = response.get('current_date', timestamp)
+            else:
+                logging.debug('Статус работы  не изменился.')
         except Exception as error:
-            message = error
             logging.exception('Сбой в работе программы: {error}')
-            send_message(bot, message)
+            send_message(bot, error)
         finally:
             time.sleep(RETRY_PERIOD)
 
