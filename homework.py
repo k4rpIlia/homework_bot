@@ -68,7 +68,7 @@ def check_tokens():
 def send_message(bot, message):
     """Функция отправляет сообщение в чат."""
     try:
-        bot.send_message(chat_id=23436567687654, text=message)
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logging.debug('Отправлено сообщение в Telegram')
     except telegram.error.TelegramError:
         logging.error('Ошибка отправки сообщения')
